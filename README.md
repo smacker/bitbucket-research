@@ -281,3 +281,9 @@ type User struct {
 ### Performance
 
 Bitbucket server accepts big numbers as perPage param. There are no request limits and downloader can be deployed close to the server. So it should be fast.
+
+### Notes
+
+- Go-wrapper doesn't have defined types for Activity or Comments
+- Go wrapper doesn't support pagination for Activities endpoint
+- Auth is similar to cloud one: OAuth2, Basic HTTP, AccessToken, APIKey

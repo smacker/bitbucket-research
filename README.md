@@ -12,7 +12,9 @@ Because Cloud and Server are absolutely different products they provide differen
 
 ## Cloud
 
-Source-code: https://github.com/smacker/bitbucket-research/blob/master/cloud/main.go
+- Source-code: https://github.com/smacker/bitbucket-research/blob/master/cloud/main.go
+- Swagger API defenitions: https://developer.atlassian.com/bitbucket/api/2/reference/resource/
+- Go client: https://github.com/wbrefvem/go-bitbucket
 
 ### Entities
 

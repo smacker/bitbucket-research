@@ -27,6 +27,8 @@ Objects we are interested in:
 - Issue Comments (broken, need fix in the go wrapper)
 - Issues Export (doesn't work for me, maybe because none of the repos has issues)
 
+FIXME: need to add teams/users
+
 ### Schema
 
 ```go
@@ -170,10 +172,22 @@ $ cat output.txt | grep 'issue {' | wc -l
 
 ## Server
 
-Source-code:
+- Source-code: https://github.com/smacker/bitbucket-research/blob/master/server/main.go
+- Swagger API defenitions: https://docs.atlassian.com/bitbucket-server/rest/6.6.0/bitbucket-rest.html
+- Go client: https://github.com/gfleury/go-bitbucket-v1
 
 ### Entities
+
+- Groups
+- Users
+- Projects
+- Repositories
+- Pull Requests
+- Pull Requests Comments
+- Pull Requests Tasks?
 
 ### Schema
 
 ### Performance
+
+Bitbucket server accepts big numbers as perPage param. There are no request limits and downloader can be deployed close to the server. So it should be fast.

@@ -188,6 +188,96 @@ $ cat output.txt | grep 'issue {' | wc -l
 
 ### Schema
 
+```go
+type Project struct {
+	Key         string `json:"key"`
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Public      bool   `json:"public"`
+	Type        string `json:"type"`
+	Links       Links  `json:"links"`
+}
+
+type Repository struct {
+	Slug          string  `json:"slug"`
+	ID            int     `json:"id"`
+	Name          string  `json:"name"`
+	ScmID         string  `json:"scmId"`
+	State         string  `json:"state"`
+	StatusMessage string  `json:"statusMessage"`
+	Forkable      bool    `json:"forkable"`
+	Project       Project `json:"project"`
+	Public        bool    `json:"public"`
+	Links         struct {
+		Clone []CloneLink `json:"clone"`
+		Self  []SelfLink  `json:"self"`
+	} `json:"links"`
+}
+
+type PullRequest struct {
+	ID           int                `json:"id"`
+	Version      int32              `json:"version"`
+	Title        string             `json:"title"`
+	Description  string             `json:"description"`
+	State        string             `json:"state"`
+	Open         bool               `json:"open"`
+	Closed       bool               `json:"closed"`
+	CreatedDate  int64              `json:"createdDate"`
+	UpdatedDate  int64              `json:"updatedDate"`
+	FromRef      PullRequestRef     `json:"fromRef"`
+	ToRef        PullRequestRef     `json:"toRef"`
+	Locked       bool               `json:"locked"`
+	Author       UserWithMetadata   `json:"author"`
+	Reviewers    []UserWithMetadata `json:"reviewers"`
+	Participants []UserWithMetadata `json:"participants"`
+	Properties   struct {
+		MergeResult       MergeResult `json:"mergeResult"`
+		ResolvedTaskCount int         `json:"resolvedTaskCount"`
+		OpenTaskCount     int         `json:"openTaskCount"`
+	} `json:"properties"`
+	Links Links `json:"links"`
+}
+
+type UserWithMetadata struct {
+	User     UserWithLinks `json:"user"`
+	Role     string        `json:"role"`
+	Approved bool          `json:"approved"`
+	Status   string        `json:"status"`
+}
+
+type Comment struct {
+	ID          int
+	Text        string
+	Author      bitbucketv1.User
+	CreatedDate int64
+	UpdatedDate int64
+	Comments    []Comment
+	// tasks
+}
+
+type Activity struct {
+	ID            int
+	CreatedDate   int64
+	User          bitbucketv1.User
+	Action        string
+	CommentAction string
+	Comment       Comment
+	//commentAnchor - for comments in code
+	//diff - for comments in code
+}
+
+type User struct {
+	Name        string `json:"name"`
+	Email       string `json:"emailAddress"`
+	ID          int    `json:"id"`
+	DisplayName string `json:"displayName"`
+	Active      bool   `json:"active"`
+	Slug        string `json:"slug"`
+	Type        string `json:"type"`
+}
+```
+
 ### Performance
 
 Bitbucket server accepts big numbers as perPage param. There are no request limits and downloader can be deployed close to the server. So it should be fast.

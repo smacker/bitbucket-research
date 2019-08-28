@@ -237,6 +237,13 @@ func getIssuesFast(ctx context.Context, c *bitbucket.APIClient, repo bitbucket.R
 	return nil, nil
 }
 
+func getMembers(ctx context.Context, c *bitbucket.APIClient, owner string) ([]bitbucket.User, error) {
+	// The methods is broken, it should return list of users but it returns one user
+	//members, _, err := c.TeamsApi.TeamsUsernameMembersGet(ctx, owner)
+
+	return nil, nil
+}
+
 func main() {
 
 	owner := "Unity-Technologies"
@@ -252,6 +259,15 @@ func main() {
 	// ctx := context.WithValue(context.Background(), bitbucket.ContextBasicAuth, basicAuth)
 
 	c := bitbucket.NewAPIClient(bitbucket.NewConfiguration())
+
+	users, err := getMembers(ctx, c, owner)
+	if err != nil {
+		panic(err)
+	}
+	for _, user := range users {
+		fmt.Printf("user: %+v\n", user)
+	}
+
 	repos, err := getRepositories(ctx, c, owner)
 	if err != nil {
 		panic(err)
@@ -269,10 +285,10 @@ func main() {
 				panic(err)
 			}
 			for _, comment := range comments {
-				fmt.Println("comment", comment)
+				fmt.Printf("comment: %+v\n", comment)
 			}
 
-			fmt.Println("pr", pr)
+			fmt.Printf("pr: %+v\n", pr)
 		}
 
 		if repo.HasIssues {
@@ -293,13 +309,13 @@ func main() {
 					panic(err)
 				}
 				for _, comment := range comments {
-					fmt.Println("comment", comment)
+					fmt.Printf("comment: %+v\n", comment)
 				}
 
-				fmt.Println("issue", issue)
+				fmt.Printf("issue: %+v\n", issue)
 			}
 		}
 
-		fmt.Println("repo", repo)
+		fmt.Printf("repo: %+v\n", repo)
 	}
 }

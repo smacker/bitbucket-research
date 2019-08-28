@@ -26,8 +26,7 @@ Objects we are interested in:
 - Issues
 - Issue Comments (broken, need fix in the go wrapper)
 - Issues Export (doesn't work for me, maybe because none of the repos has issues)
-
-FIXME: need to add teams/users
+- Users (broken, need fix in the go wrapper)
 
 ### Schema
 
@@ -162,9 +161,10 @@ $ cat output.txt | grep 'issue {' | wc -l
 
 ### Notes
 
-- Need to find some organization with issues for test
+- Getting users is broken in go-wrapper
+- I could find any open source organization which uses bitbucket issues, most probably it's not popular for enterprise as well as bitbucket has integration to JIRA.
 - Need to fix issues comments
-- Need to check if issues export works (on org with issues)
+- Export didn't work for me (most probably because project doesn't have issues)
 - Go wrapper doesn't support changing perPage parameter
 - Documentation doesn't say anything about request limits
 - Different type of authorization are supported: OAuth2, Basic HTTP, AccessToken

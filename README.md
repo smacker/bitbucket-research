@@ -6,7 +6,7 @@ Atlassian has 3 products with the name Bitbucket.
 2. Bitbucket Server
 3. Bitbucket Data Center
 
-Bitbucket Cloud and Bitbucket Server are completely different products which share only the name. I didn't test yet but Bitbucket Data Center looks just as distributed version of Bitbucket Server.
+Bitbucket Cloud and Bitbucket Server are completely different products which share only the name. Bitbucket Data Center is just a distributed version of Bitbucket Server.
 
 Because Cloud and Server are absolutely different products they provide different API. Which means we need to implement separate downloaders for them.
 

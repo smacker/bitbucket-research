@@ -276,6 +276,10 @@ type User struct {
 	Slug        string `json:"slug"`
 	Type        string `json:"type"`
 }
+
+type Group struct {
+	Name string
+}
 ```
 
 ### Performance

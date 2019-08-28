@@ -169,7 +169,7 @@ func getPRComments(c *bitbucketv1.APIClient, projectKey, repositorySlug string, 
 	return comments, nil
 }
 
-func GetPullUsersResponse(r *bitbucketv1.APIResponse) ([]bitbucketv1.User, error) {
+func GetUsersResponse(r *bitbucketv1.APIResponse) ([]bitbucketv1.User, error) {
 	var m []bitbucketv1.User
 	err := mapstructure.Decode(r.Values["values"], &m)
 	return m, err
@@ -177,19 +177,82 @@ func GetPullUsersResponse(r *bitbucketv1.APIResponse) ([]bitbucketv1.User, error
 
 // GetUsers() calls /api/1.0/admin/users which requires addtional permission
 // GetUsers_26() calls /api/1.0/users but doesn't support pagination
-func getUsers(c *bitbucketv1.APIClient) ([]bitbucketv1.User, error) {
+func getUsers_(c *bitbucketv1.APIClient) ([]bitbucketv1.User, error) {
 	var users []bitbucketv1.User
 	// ctx param is unused
 	resp, err := c.DefaultApi.GetUsers_26(nil)
 	if err != nil {
 		return nil, fmt.Errorf("users req failed: %v", err)
 	}
-	users, err = GetPullUsersResponse(resp)
+	users, err = GetUsersResponse(resp)
 	if err != nil {
-		return nil, fmt.Errorf("activities decoding failed: %v", err)
+		return nil, fmt.Errorf("users decoding failed: %v", err)
 	}
 
 	return users, nil
+}
+
+func getUsers(c *bitbucketv1.APIClient) ([]bitbucketv1.User, error) {
+	var users []bitbucketv1.User
+
+	start := 0
+	for {
+		resp, err := c.DefaultApi.GetUsers(map[string]interface{}{
+			"limit": defaultLimit, "start": start})
+		if err != nil {
+			return nil, fmt.Errorf("users req failed: %v", err)
+		}
+		pageUsers, err := GetUsersResponse(resp)
+		if err != nil {
+			return nil, fmt.Errorf("users decoding failed: %v", err)
+		}
+		users = append(users, pageUsers...)
+
+		isLastPage := resp.Values["isLastPage"].(bool)
+		if isLastPage {
+			break
+		}
+
+		start = int(resp.Values["nextPageStart"].(float64))
+	}
+	return users, nil
+}
+
+type Group struct {
+	Name string
+}
+
+func GetGroupsResponse(r *bitbucketv1.APIResponse) ([]Group, error) {
+	var m []Group
+	err := mapstructure.Decode(r.Values["values"], &m)
+	return m, err
+}
+
+func getGroups(c *bitbucketv1.APIClient) ([]Group, error) {
+	var groups []Group
+
+	start := 0
+	for {
+		resp, err := c.DefaultApi.GetGroups(map[string]interface{}{
+			"limit": defaultLimit, "start": start})
+		if err != nil {
+			return nil, fmt.Errorf("groups req failed: %v", err)
+		}
+		pageGroups, err := GetGroupsResponse(resp)
+		if err != nil {
+			return nil, fmt.Errorf("groups decoding failed: %v", err)
+		}
+		groups = append(groups, pageGroups...)
+
+		isLastPage := resp.Values["isLastPage"].(bool)
+		if isLastPage {
+			break
+		}
+
+		start = int(resp.Values["nextPageStart"].(float64))
+	}
+
+	return groups, nil
 }
 
 func main() {
@@ -239,5 +302,13 @@ func main() {
 	}
 	for _, user := range users {
 		fmt.Printf("%+v\n", user)
+	}
+
+	groups, err := getGroups(c)
+	if err != nil {
+		panic(err)
+	}
+	for _, group := range groups {
+		fmt.Printf("%+v\n", group)
 	}
 }

@@ -287,3 +287,4 @@ Bitbucket server accepts big numbers as perPage param. There are no request limi
 - Go-wrapper doesn't have defined types for Activity or Comments
 - Go wrapper doesn't support pagination for Activities endpoint
 - Auth is similar to cloud one: OAuth2, Basic HTTP, AccessToken, APIKey
+- Api has 2 endpoints for getting users, one works well but requires additional permissions, another doesn't support pagination

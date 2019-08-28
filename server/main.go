@@ -169,6 +169,29 @@ func getPRComments(c *bitbucketv1.APIClient, projectKey, repositorySlug string, 
 	return comments, nil
 }
 
+func GetPullUsersResponse(r *bitbucketv1.APIResponse) ([]bitbucketv1.User, error) {
+	var m []bitbucketv1.User
+	err := mapstructure.Decode(r.Values["values"], &m)
+	return m, err
+}
+
+// GetUsers() calls /api/1.0/admin/users which requires addtional permission
+// GetUsers_26() calls /api/1.0/users but doesn't support pagination
+func getUsers(c *bitbucketv1.APIClient) ([]bitbucketv1.User, error) {
+	var users []bitbucketv1.User
+	// ctx param is unused
+	resp, err := c.DefaultApi.GetUsers_26(nil)
+	if err != nil {
+		return nil, fmt.Errorf("users req failed: %v", err)
+	}
+	users, err = GetPullUsersResponse(resp)
+	if err != nil {
+		return nil, fmt.Errorf("activities decoding failed: %v", err)
+	}
+
+	return users, nil
+}
+
 func main() {
 	basicAuth := bitbucketv1.BasicAuth{UserName: "admin", Password: "admin"}
 	ctx := context.WithValue(context.Background(), bitbucketv1.ContextBasicAuth, basicAuth)
@@ -208,5 +231,13 @@ func main() {
 		}
 
 		fmt.Printf("%+v\n", project)
+	}
+
+	users, err := getUsers(c)
+	if err != nil {
+		panic(err)
+	}
+	for _, user := range users {
+		fmt.Printf("%+v\n", user)
 	}
 }

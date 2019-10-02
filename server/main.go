@@ -2,10 +2,16 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"net/http"
 
 	bitbucketv1 "github.com/gfleury/go-bitbucket-v1"
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/mitchellh/mapstructure"
+	"github.com/wbrefvem/go-bitbucket"
 )
 
 const defaultLimit = 1000
@@ -82,7 +88,7 @@ func getPullRequests(c *bitbucketv1.APIClient, projectKey, repositorySlug string
 	start := 0
 	for {
 		resp, err := c.DefaultApi.GetPullRequestsPage(projectKey, repositorySlug, map[string]interface{}{
-			"limit": defaultLimit, "start": start})
+			"limit": defaultLimit, "start": start, "state": "ALL"})
 		if err != nil {
 			return nil, fmt.Errorf("prs req failed: %v", err)
 		}
@@ -101,6 +107,104 @@ func getPullRequests(c *bitbucketv1.APIClient, projectKey, repositorySlug string
 	}
 
 	return prs, nil
+}
+
+type Commit struct {
+	ID        string
+	DisplayID string
+	Message   string
+	Author    bitbucket.User
+	// AuthorTimestamp
+	committer bitbucket.User
+	// CommitterTimestamp
+	// Parents
+}
+
+type Diff struct {
+	Source      struct{}
+	Destination struct{}
+	Hunks       []struct {
+		Segments []struct {
+			Type  string
+			Lines []struct {
+				Destination int
+				Source      int
+				Line        string
+			}
+		}
+	}
+}
+
+type DiffResp struct {
+	Diffs []Diff
+}
+
+type PullRequest struct {
+	bitbucketv1.PullRequest
+	Commits      int
+	ChangedFiles int
+	Additions    int
+	Deletions    int
+	Comments     int
+}
+
+func enrichPullRequest(c *bitbucketv1.APIClient, projectKey, repositorySlug string, pr bitbucketv1.PullRequest) (*PullRequest, error) {
+	var commits []Commit
+	start := 0
+	for {
+		resp, err := c.DefaultApi.GetPullRequestCommitsWithOptions(projectKey, repositorySlug, pr.ID, map[string]interface{}{
+			"limit": defaultLimit, "start": start})
+		if err != nil {
+			return nil, fmt.Errorf("prs commits req failed: %v", err)
+		}
+
+		var pageCommits []Commit
+		err = mapstructure.Decode(resp.Values["values"], &pageCommits)
+		if err != nil {
+			return nil, fmt.Errorf("prs commits decoding failed: %v", err)
+		}
+		commits = append(commits, pageCommits...)
+
+		isLastPage := resp.Values["isLastPage"].(bool)
+		if isLastPage {
+			break
+		}
+
+		start = int(resp.Values["nextPageStart"].(float64))
+	}
+
+	resp, err := c.DefaultApi.GetPullRequestDiff(projectKey, repositorySlug, pr.ID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("prs commits req failed: %v", err)
+	}
+
+	var diffResp DiffResp
+	err = mapstructure.Decode(resp.Values, &diffResp)
+	if err != nil {
+		return nil, fmt.Errorf("prs diff decoding failed: %v", err)
+	}
+
+	var additions, deletions int
+	for _, d := range diffResp.Diffs {
+		for _, h := range d.Hunks {
+			for _, s := range h.Segments {
+				if s.Type == "ADDED" {
+					additions += len(s.Lines)
+				}
+				if s.Type == "REMOVED" {
+					deletions += len(s.Lines)
+				}
+			}
+		}
+	}
+
+	return &PullRequest{
+		PullRequest:  pr,
+		Commits:      len(commits),
+		ChangedFiles: len(diffResp.Diffs),
+		Additions:    additions,
+		Deletions:    deletions,
+	}, nil
 }
 
 type Comment struct {
@@ -255,60 +359,124 @@ func getGroups(c *bitbucketv1.APIClient) ([]Group, error) {
 	return groups, nil
 }
 
-func main() {
+func Migrate(databaseURL string) error {
+	m, err := migrate.New("file://migrations", databaseURL)
+	if err != nil {
+		return err
+	}
+	return m.Up()
+}
+
+func run() error {
+	connStr := "postgres://smacker@127.0.0.1:5432/bbserver?sslmode=disable"
+
+	db, err := sql.Open("postgres", connStr)
+	if err != nil {
+		return err
+	}
+
+	if err = db.Ping(); err != nil {
+		return err
+	}
+
+	if err = Migrate(connStr); err != nil && err != migrate.ErrNoChange {
+		return err
+	}
+
+	storer := DB{DB: db}
+	storer.Version(1)
+
+	err = storer.Begin()
+	if err != nil {
+		return fmt.Errorf("could not call Begin(): %v", err)
+	}
+
 	basicAuth := bitbucketv1.BasicAuth{UserName: "admin", Password: "admin"}
 	ctx := context.WithValue(context.Background(), bitbucketv1.ContextBasicAuth, basicAuth)
 	cfg := bitbucketv1.NewConfiguration("http://localhost:7990/rest")
+	cfg.HTTPClient = &http.Client{
+		Transport: &retryTransport{http.DefaultTransport},
+	}
 	c := bitbucketv1.NewAPIClient(ctx, cfg)
 
 	projects, err := getProjects(c)
 	if err != nil {
-		panic(err)
+		return err
 	}
+
 	for _, project := range projects {
+		if err := storer.SaveOrganization(project); err != nil {
+			return err
+		}
+
 		repos, err := getRepositories(c, project.Key)
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		for _, repo := range repos {
+			if err := storer.SaveRepository(project, repo); err != nil {
+				return err
+			}
+
 			prs, err := getPullRequests(c, project.Key, repo.Slug)
 			if err != nil {
-				panic(err)
+				return err
 			}
 
 			for _, pr := range prs {
+				epr, err := enrichPullRequest(c, project.Key, repo.Slug, pr)
+				if err != nil {
+					return err
+				}
+
 				comments, err := getPRComments(c, project.Key, repo.Slug, pr.ID)
 				if err != nil {
-					panic(err)
+					return err
+				}
+
+				epr.Comments = len(comments)
+
+				if err := storer.SavePullRequest(project.Key, repo.Slug, *epr); err != nil {
+					return err
 				}
 
 				for _, comment := range comments {
-					fmt.Printf("%+v\n", comment)
+					if err := storer.SavePullRequestComment(project.Key, repo.Slug, pr.ID, comment); err != nil {
+						return err
+					}
 				}
-
-				fmt.Printf("%+v\n", pr)
 			}
-
-			fmt.Printf("%+v\n", repo)
 		}
-
-		fmt.Printf("%+v\n", project)
 	}
 
 	users, err := getUsers(c)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	for _, user := range users {
-		fmt.Printf("%+v\n", user)
+		if err := storer.SaveUser(user); err != nil {
+			return err
+		}
 	}
 
-	groups, err := getGroups(c)
-	if err != nil {
+	if err := storer.SetActiveVersion(1); err != nil {
+		return err
+	}
+
+	return storer.Commit()
+}
+
+func main() {
+	if err := run(); err != nil {
 		panic(err)
 	}
-	for _, group := range groups {
-		fmt.Printf("%+v\n", group)
-	}
+
+	// groups, err := getGroups(c)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// for _, group := range groups {
+	// 	fmt.Printf("%+v\n", group)
+	// }
 }

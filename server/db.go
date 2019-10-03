@@ -306,22 +306,32 @@ func (s *DB) SavePullRequest(repositoryOwner, repositoryName string, pr PullRequ
 	hash := sha256.Sum256([]byte(st))
 	hashString := fmt.Sprintf("%x", hash)
 
+	var closedAt *time.Time
+	if pr.ClosedAt > 0 {
+		t := time.Unix(pr.ClosedAt, 0)
+		closedAt = &t
+	}
+	var mergedAt *time.Time
+	if pr.MergedAt > 0 {
+		t := time.Unix(pr.MergedAt, 0)
+		mergedAt = &t
+	}
+
 	_, err := s.tx.Exec(statement,
 		hashString,
 		pq.Array([]int{s.v}),
 
-		pr.Additions,                    // additions bigint,
-		pq.Array([]string{}),            // assignees text[] NOT NULL,
-		"",                              // author_association text,
-		pr.ToRef.ID,                     // base_ref text NOT NULL,
-		pr.ToRef.Repository.Name,        // base_repository_name text NOT NULL,
-		pr.ToRef.Repository.Project.Key, // base_repository_owner text NOT NULL,
-		pr.ToRef.LatestCommit,           // base_sha text NOT NULL,
-		"",                              // base_user text NOT NULL,
-		pr.Description,                  // body text,
-		pr.ChangedFiles,                 // changed_files bigint,
-		// FIXME
-		nil,                                 // closed_at timestamptz,
+		pr.Additions,                        // additions bigint,
+		pq.Array([]string{}),                // assignees text[] NOT NULL,
+		"",                                  // author_association text,
+		pr.ToRef.ID,                         // base_ref text NOT NULL,
+		pr.ToRef.Repository.Name,            // base_repository_name text NOT NULL,
+		pr.ToRef.Repository.Project.Key,     // base_repository_owner text NOT NULL,
+		pr.ToRef.LatestCommit,               // base_sha text NOT NULL,
+		"",                                  // base_user text NOT NULL,
+		pr.Description,                      // body text,
+		pr.ChangedFiles,                     // changed_files bigint,
+		closedAt,                            // closed_at timestamptz,
 		pr.Comments,                         // comments bigint,
 		pr.Commits,                          // commits bigint,
 		time.Unix(int64(pr.CreatedDate), 0), // created_at timestamptz,
@@ -338,18 +348,16 @@ func (s *DB) SavePullRequest(repositoryOwner, repositoryName string, pr PullRequ
 		"",                                  // merge_commit_sha text,
 		false,                               // mergeable boolean,
 		pr.State == "MERGED",                // merged boolean,
-		// FIXME
-		nil,             // merged_at timestamptz,
-		0,               // merged_by_id bigint NOT NULL,
-		"",              // merged_by_login text NOT NULL,
-		"",              // milestone_id text NOT NULL,
-		"",              // milestone_title text NOT NULL,
-		"",              // node_id text,
-		pr.ID,           // number bigint,
-		repositoryName,  // repository_name text NOT NULL,
-		repositoryOwner, // repository_owner text NOT NULL,
-		// FIXME
-		0,                                   // review_comments bigint,
+		mergedAt,                            // merged_at timestamptz,
+		pr.MergedBy.ID,                      // merged_by_id bigint NOT NULL,
+		pr.MergedBy.Name,                    // merged_by_login text NOT NULL,
+		"",                                  // milestone_id text NOT NULL,
+		"",                                  // milestone_title text NOT NULL,
+		"",                                  // node_id text,
+		pr.ID,                               // number bigint,
+		repositoryName,                      // repository_name text NOT NULL,
+		repositoryOwner,                     // repository_owner text NOT NULL,
+		pr.ReviewComments,                   // review_comments bigint,
 		pr.State,                            // state text,
 		pr.Title,                            // title text,
 		time.Unix(int64(pr.UpdatedDate), 0), // updated_at timestamptz,
@@ -409,7 +417,7 @@ func (s *DB) SaveIssueComment(repositoryOwner, repositoryName string, issueNumbe
 	return nil
 }
 
-func (s *DB) SavePullRequestReview(repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error {
+func (s *DB) SavePullRequestReview(repositoryOwner, repositoryName string, pullRequestNumber int, review Review) error {
 	statement := fmt.Sprintf(`INSERT INTO pull_request_reviews_versioned
 		(sum256, versions, %s)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
@@ -426,24 +434,24 @@ func (s *DB) SavePullRequestReview(repositoryOwner, repositoryName string, pullR
 		hashString,
 		pq.Array([]int{s.v}),
 
-		review.Body,                   // body text,
-		review.Commit.Oid,             // commit_id text,
-		review.Url,                    // htmlurl text,
-		review.DatabaseId,             // id bigint,
-		review.Id,                     // node_id text,
-		pullRequestNumber,             // pull_request_number bigint NOT NULL,
-		repositoryName,                // repository_name text NOT NULL,
-		repositoryOwner,               // repository_owner text NOT NULL,
-		review.State,                  // state text,
-		review.SubmittedAt,            // submitted_at timestamptz,
-		review.Author.User.DatabaseId, // user_id bigint NOT NULL,
-		review.Author.Login,           // user_login text NOT NULL,
+		"",                                      // body text,
+		"",                                      // commit_id text,
+		"",                                      // htmlurl text,
+		review.ID,                               // id bigint,
+		"",                                      // node_id text,
+		pullRequestNumber,                       // pull_request_number bigint NOT NULL,
+		repositoryName,                          // repository_name text NOT NULL,
+		repositoryOwner,                         // repository_owner text NOT NULL,
+		review.State,                            // state text,
+		time.Unix(int64(review.CreatedDate), 0), // submitted_at timestamptz,
+		review.User.ID,                          // user_id bigint NOT NULL,
+		review.User.Slug,                        // user_login text NOT NULL,
 
 		s.v,
 	)
 
 	if err != nil {
-		return fmt.Errorf("savePullRequestComment: %v", err)
+		return fmt.Errorf("savePullRequestReview: %v", err)
 	}
 	return nil
 }

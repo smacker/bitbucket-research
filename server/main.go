@@ -141,11 +141,16 @@ type DiffResp struct {
 
 type PullRequest struct {
 	bitbucketv1.PullRequest
-	Commits      int
-	ChangedFiles int
-	Additions    int
-	Deletions    int
-	Comments     int
+	Commits        int
+	ChangedFiles   int
+	Additions      int
+	Deletions      int
+	Comments       int
+	ReviewComments int
+
+	ClosedAt int64
+	MergedAt int64
+	MergedBy bitbucketv1.User
 }
 
 func enrichPullRequest(c *bitbucketv1.APIClient, projectKey, repositorySlug string, pr bitbucketv1.PullRequest) (*PullRequest, error) {
@@ -217,6 +222,19 @@ type Comment struct {
 	// tasks
 }
 
+type Review struct {
+	ID          int
+	State       string
+	User        bitbucketv1.User
+	CreatedDate int64
+}
+
+type PRStateUpdate struct {
+	State string
+	User  bitbucketv1.User
+	Date  int64
+}
+
 type Activity struct {
 	ID            int
 	CreatedDate   int64
@@ -240,27 +258,59 @@ func GetActivitiesResponse(r *bitbucketv1.APIResponse) ([]Activity, error) {
 // which makes it impossible to use to retrive general comments
 //
 // Pagination isn't supported by go wrapper, will return only 25 entities
-func getPRComments(c *bitbucketv1.APIClient, projectKey, repositorySlug string, pullRequestID int) ([]Comment, error) {
+func getPRActivity(c *bitbucketv1.APIClient, projectKey, repositorySlug string, pullRequestID int) ([]Comment, []Review, *PRStateUpdate, error) {
 	var comments []Comment
+	var reviews []Review
+	var state *PRStateUpdate
 
 	// start := 0
 	// for {
 	resp, err := c.DefaultApi.GetPullRequestActivity(projectKey, repositorySlug, pullRequestID)
 	//map[string]interface{}{"limit": defaultLimit, "start": start}
 	if err != nil {
-		return nil, fmt.Errorf("activities req failed: %v", err)
+		return nil, nil, nil, fmt.Errorf("activities req failed: %v", err)
 	}
+
 	pageActivities, err := GetActivitiesResponse(resp)
 	if err != nil {
-		return nil, fmt.Errorf("activities decoding failed: %v", err)
+		return nil, nil, nil, fmt.Errorf("activities decoding failed: %v", err)
 	}
 
 	for _, a := range pageActivities {
-		// get only original versions of comments, can be improved
-		if a.Action != "COMMENTED" || a.CommentAction != "ADDED" {
-			continue
+		switch a.Action {
+		case "COMMENTED":
+			if a.CommentAction != "ADDED" {
+				continue
+			}
+			comments = append(comments, a.Comment)
+		case "APPROVED":
+			reviews = append(reviews, Review{
+				ID:          a.ID,
+				State:       "APPROVED",
+				User:        a.User,
+				CreatedDate: a.CreatedDate,
+			})
+		case "REVIEWED":
+			reviews = append(reviews, Review{
+				ID:          a.ID,
+				State:       "CHANGES_REQUESTED",
+				User:        a.User,
+				CreatedDate: a.CreatedDate,
+			})
+		case "MERGED":
+			state = &PRStateUpdate{
+				State: "MERGED",
+				User:  a.User,
+				Date:  a.CreatedDate,
+			}
+		case "DECLINED":
+			state = &PRStateUpdate{
+				State: "CLOSED",
+				User:  a.User,
+				Date:  a.CreatedDate,
+			}
 		}
-		comments = append(comments, a.Comment)
+
 	}
 	// isLastPage := resp.Values["isLastPage"].(bool)
 	// if isLastPage {
@@ -270,7 +320,7 @@ func getPRComments(c *bitbucketv1.APIClient, projectKey, repositorySlug string, 
 	//start = int(resp.Values["nextPageStart"].(float64))
 	//}
 
-	return comments, nil
+	return comments, reviews, state, nil
 }
 
 func GetUsersResponse(r *bitbucketv1.APIResponse) ([]bitbucketv1.User, error) {
@@ -430,12 +480,21 @@ func run() error {
 					return err
 				}
 
-				comments, err := getPRComments(c, project.Key, repo.Slug, pr.ID)
+				comments, reviews, stateUpdate, err := getPRActivity(c, project.Key, repo.Slug, pr.ID)
 				if err != nil {
 					return err
 				}
 
 				epr.Comments = len(comments)
+				epr.ReviewComments = len(reviews)
+				if stateUpdate != nil {
+					if stateUpdate.State == "MERGED" {
+						epr.MergedAt = stateUpdate.Date
+						epr.MergedBy = stateUpdate.User
+					} else if stateUpdate.State == "CLOSED" {
+						epr.ClosedAt = stateUpdate.Date
+					}
+				}
 
 				if err := storer.SavePullRequest(project.Key, repo.Slug, *epr); err != nil {
 					return err
@@ -443,6 +502,12 @@ func run() error {
 
 				for _, comment := range comments {
 					if err := storer.SavePullRequestComment(project.Key, repo.Slug, pr.ID, comment); err != nil {
+						return err
+					}
+				}
+
+				for _, review := range reviews {
+					if err := storer.SavePullRequestReview(project.Key, repo.Slug, pr.ID, review); err != nil {
 						return err
 					}
 				}

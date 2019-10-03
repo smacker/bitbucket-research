@@ -329,23 +329,6 @@ func GetUsersResponse(r *bitbucketv1.APIResponse) ([]bitbucketv1.User, error) {
 	return m, err
 }
 
-// GetUsers() calls /api/1.0/admin/users which requires addtional permission
-// GetUsers_26() calls /api/1.0/users but doesn't support pagination
-func getUsers_(c *bitbucketv1.APIClient) ([]bitbucketv1.User, error) {
-	var users []bitbucketv1.User
-	// ctx param is unused
-	resp, err := c.DefaultApi.GetUsers_26(nil)
-	if err != nil {
-		return nil, fmt.Errorf("users req failed: %v", err)
-	}
-	users, err = GetUsersResponse(resp)
-	if err != nil {
-		return nil, fmt.Errorf("users decoding failed: %v", err)
-	}
-
-	return users, nil
-}
-
 func getUsers(c *bitbucketv1.APIClient) ([]bitbucketv1.User, error) {
 	var users []bitbucketv1.User
 
@@ -370,43 +353,6 @@ func getUsers(c *bitbucketv1.APIClient) ([]bitbucketv1.User, error) {
 		start = int(resp.Values["nextPageStart"].(float64))
 	}
 	return users, nil
-}
-
-type Group struct {
-	Name string
-}
-
-func GetGroupsResponse(r *bitbucketv1.APIResponse) ([]Group, error) {
-	var m []Group
-	err := mapstructure.Decode(r.Values["values"], &m)
-	return m, err
-}
-
-func getGroups(c *bitbucketv1.APIClient) ([]Group, error) {
-	var groups []Group
-
-	start := 0
-	for {
-		resp, err := c.DefaultApi.GetGroups(map[string]interface{}{
-			"limit": defaultLimit, "start": start})
-		if err != nil {
-			return nil, fmt.Errorf("groups req failed: %v", err)
-		}
-		pageGroups, err := GetGroupsResponse(resp)
-		if err != nil {
-			return nil, fmt.Errorf("groups decoding failed: %v", err)
-		}
-		groups = append(groups, pageGroups...)
-
-		isLastPage := resp.Values["isLastPage"].(bool)
-		if isLastPage {
-			break
-		}
-
-		start = int(resp.Values["nextPageStart"].(float64))
-	}
-
-	return groups, nil
 }
 
 func Migrate(databaseURL string) error {
@@ -536,12 +482,4 @@ func main() {
 	if err := run(); err != nil {
 		panic(err)
 	}
-
-	// groups, err := getGroups(c)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// for _, group := range groups {
-	// 	fmt.Printf("%+v\n", group)
-	// }
 }

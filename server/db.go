@@ -7,7 +7,6 @@ import (
 	"time"
 
 	bitbucketv1 "github.com/gfleury/go-bitbucket-v1"
-	"github.com/src-d/metadata-retrieval/github/graphql"
 
 	"github.com/lib/pq"
 )
@@ -456,7 +455,7 @@ func (s *DB) SavePullRequestReview(repositoryOwner, repositoryName string, pullR
 	return nil
 }
 
-func (s *DB) SavePullRequestReviewComment(repositoryOwner, repositoryName string, pullRequestNumber int, pullRequestReviewId int, comment *graphql.PullRequestReviewComment) error {
+func (s *DB) SavePullRequestReviewComment(repositoryOwner, repositoryName string, pullRequestNumber int, comment DiffComment) error {
 	statement := fmt.Sprintf(`INSERT INTO pull_request_comments_versioned
 		(sum256, versions, %s)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
@@ -466,7 +465,7 @@ func (s *DB) SavePullRequestReviewComment(repositoryOwner, repositoryName string
 		SET versions = array_append(pull_request_comments_versioned.versions, $23)`,
 		pullRequestReviewCommentsCols)
 
-	st := fmt.Sprintf("%v %v %v %v %+v", repositoryOwner, repositoryName, pullRequestNumber, pullRequestReviewId, comment)
+	st := fmt.Sprintf("%v %v %v %+v", repositoryOwner, repositoryName, pullRequestNumber, comment)
 	hash := sha256.Sum256([]byte(st))
 	hashString := fmt.Sprintf("%x", hash)
 
@@ -474,27 +473,30 @@ func (s *DB) SavePullRequestReviewComment(repositoryOwner, repositoryName string
 		hashString,
 		pq.Array([]int{s.v}),
 
-		comment.AuthorAssociation, // author_association text,
-		comment.Body,              // body text,
-		comment.Commit.Oid,        // commit_id text,
-		comment.CreatedAt,         // created_at timestamptz,
-		comment.DiffHunk,          // diff_hunk text,
-		comment.Url,               // htmlurl text,
-		comment.DatabaseId,        // id bigint,
+		"",                                       // author_association text,
+		comment.Text,                             // body text,
+		comment.ToHash,                           // commit_id text,
+		time.Unix(int64(comment.CreatedDate), 0), // created_at timestamptz,
+		// FIXME possible to calculate
+		"", // diff_hunk text,
+		// possible to calculate like, example url:
+		// http://localhost:7990/projects/MY/repos/go-git/pull-requests/1/overview?commentId=2
+		"",         // htmlurl text,
+		comment.ID, // id bigint,
 		// TODO
 		0,                          // in_reply_to bigint,
-		comment.Id,                 // node_id text,
-		comment.OriginalCommit.Oid, // original_commit_id text,
-		comment.OriginalPosition,   // original_position bigint,
-		comment.Path,               // path text,
-		comment.Position,           // position bigint,
+		"",                         // node_id text,
+		comment.FromHash,           // original_commit_id text,
+		0,                          // original_position bigint,
+		comment.CommentAnchor.Path, // path text,
+		comment.CommentAnchor.Line, // position bigint,
 		pullRequestNumber,          // pull_request_number bigint NOT NULL,
-		pullRequestReviewId,        // pull_request_review_id bigint,
+		0,                          // pull_request_review_id bigint,
 		repositoryName,             // repository_name text NOT NULL,
 		repositoryOwner,            // repository_owner text NOT NULL,
-		comment.UpdatedAt,          // updated_at timestamptz,
-		comment.Author.DatabaseId,  // user_id bigint NOT NULL,
-		comment.Author.Login,       // user_login text NOT NULL,
+		nil,                        // updated_at timestamptz,
+		comment.Author.ID,          // user_id bigint NOT NULL,
+		comment.Author.Slug,        // user_login text NOT NULL,
 
 		s.v,
 	)

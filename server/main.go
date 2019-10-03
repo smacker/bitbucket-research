@@ -235,6 +235,16 @@ type PRStateUpdate struct {
 	Date  int64
 }
 
+type CommentAnchor struct {
+	Line     int
+	LineType string
+	FileType string
+	Path     string
+	SrcPath  string
+	FromHash string
+	ToHash   string
+}
+
 type Activity struct {
 	ID          int
 	CreatedDate int64
@@ -244,8 +254,21 @@ type Activity struct {
 	CommentAction string
 	Comment       Comment
 	// fields below are only for comments in code
-	// commentAnchor
-	// diff
+	CommentAnchor *CommentAnchor
+	Diff          *struct {
+		Hunks []struct {
+			DestinationLine int
+			DestinationSpan int
+			SourceLine      int
+			SourceSpan      int
+			// segments
+		}
+	}
+}
+
+type DiffComment struct {
+	Comment
+	CommentAnchor
 }
 
 func GetActivitiesResponse(r *bitbucketv1.APIResponse) ([]Activity, error) {
@@ -254,8 +277,9 @@ func GetActivitiesResponse(r *bitbucketv1.APIResponse) ([]Activity, error) {
 	return m, err
 }
 
-func getPRActivity(c *bitbucketv1.APIClient, projectKey, repositorySlug string, pullRequestID int) ([]Comment, []Review, *PRStateUpdate, error) {
+func getPRActivity(c *bitbucketv1.APIClient, projectKey, repositorySlug string, pullRequestID int) ([]Comment, []DiffComment, []Review, *PRStateUpdate, error) {
 	var comments []Comment
+	var diffComments []DiffComment
 	var reviews []Review
 	var state *PRStateUpdate
 
@@ -265,12 +289,12 @@ func getPRActivity(c *bitbucketv1.APIClient, projectKey, repositorySlug string, 
 			"limit": defaultLimit, "start": start,
 		})
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("activities req failed: %v", err)
+			return nil, nil, nil, nil, fmt.Errorf("activities req failed: %v", err)
 		}
 
 		pageActivities, err := GetActivitiesResponse(resp)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("activities decoding failed: %v", err)
+			return nil, nil, nil, nil, fmt.Errorf("activities decoding failed: %v", err)
 		}
 
 		for _, a := range pageActivities {
@@ -279,7 +303,15 @@ func getPRActivity(c *bitbucketv1.APIClient, projectKey, repositorySlug string, 
 				if a.CommentAction != "ADDED" {
 					continue
 				}
-				comments = append(comments, a.Comment)
+				if a.CommentAnchor != nil {
+					diffComments = append(diffComments, DiffComment{
+						Comment:       a.Comment,
+						CommentAnchor: *a.CommentAnchor,
+					})
+				} else {
+					comments = append(comments, a.Comment)
+				}
+
 			case "APPROVED":
 				reviews = append(reviews, Review{
 					ID:          a.ID,
@@ -317,7 +349,7 @@ func getPRActivity(c *bitbucketv1.APIClient, projectKey, repositorySlug string, 
 		start = int(resp.Values["nextPageStart"].(float64))
 	}
 
-	return comments, reviews, state, nil
+	return comments, diffComments, reviews, state, nil
 }
 
 func GetUsersResponse(r *bitbucketv1.APIResponse) ([]bitbucketv1.User, error) {
@@ -423,7 +455,7 @@ func run() error {
 					return err
 				}
 
-				comments, reviews, stateUpdate, err := getPRActivity(c, project.Key, repo.Slug, pr.ID)
+				comments, diffComments, reviews, stateUpdate, err := getPRActivity(c, project.Key, repo.Slug, pr.ID)
 				if err != nil {
 					return err
 				}
@@ -445,6 +477,12 @@ func run() error {
 
 				for _, comment := range comments {
 					if err := storer.SavePullRequestComment(project.Key, repo.Slug, pr.ID, comment); err != nil {
+						return err
+					}
+				}
+
+				for _, comment := range diffComments {
+					if err := storer.SavePullRequestReviewComment(project.Key, repo.Slug, pr.ID, comment); err != nil {
 						return err
 					}
 				}

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"os"
 
 	bitbucketv1 "github.com/gfleury/go-bitbucket-v1"
 	"github.com/golang-migrate/migrate/v4"
@@ -393,7 +394,14 @@ func Migrate(databaseURL string) error {
 }
 
 func run() error {
-	connStr := "postgres://smacker@127.0.0.1:5432/bbserver?sslmode=disable"
+	// postgres://smacker@127.0.0.1:5432/bbserver?sslmode=disable
+	connStr := os.Getenv("DB")
+	// http://localhost:7990/rest
+	basePath := os.Getenv("BASE_PATH")
+	// admin
+	login := os.Getenv("LOGIN")
+	// admin
+	pass := os.Getenv("PASSWORD")
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -416,9 +424,9 @@ func run() error {
 		return fmt.Errorf("could not call Begin(): %v", err)
 	}
 
-	basicAuth := bitbucketv1.BasicAuth{UserName: "admin", Password: "admin"}
+	basicAuth := bitbucketv1.BasicAuth{UserName: login, Password: pass}
 	ctx := context.WithValue(context.Background(), bitbucketv1.ContextBasicAuth, basicAuth)
-	cfg := bitbucketv1.NewConfiguration("http://localhost:7990/rest")
+	cfg := bitbucketv1.NewConfiguration(basePath)
 	cfg.HTTPClient = &http.Client{
 		Transport: &retryTransport{http.DefaultTransport},
 	}

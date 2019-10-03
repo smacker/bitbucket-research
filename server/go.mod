@@ -2,7 +2,7 @@ module github.com/smacker/bitbucket-research/server
 
 go 1.12
 
-replace github.com/gfleury/go-bitbucket-v1 => github.com/smacker/go-bitbucket-v1 v0.0.0-20191003203704-cd6c0379d76e
+replace github.com/gfleury/go-bitbucket-v1 => github.com/smacker/go-bitbucket-v1 v0.0.0-20191003115415-cd6c0379d76e
 
 require (
 	github.com/gfleury/go-bitbucket-v1 v0.0.0-20190725203704-66612acc3762

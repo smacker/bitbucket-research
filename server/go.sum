@@ -148,6 +148,8 @@ github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPx
 github.com/sirupsen/logrus v1.4.1/go.mod h1:ni0Sbl8bgC9z8RoU9G6nDWqqs/fq4eDPysMBDgk/93Q=
 github.com/sirupsen/logrus v1.4.2 h1:SPIRibHv4MatM3XXNO2BJeFLZwZ2LvZgfQ5+UNI2im4=
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
+github.com/smacker/go-bitbucket-v1 v0.0.0-20191003203704-cd6c0379d76e h1:huOFMR1F6qPdSsN0shw88K4dEjmmHMIjh0PvyMDNUjA=
+github.com/smacker/go-bitbucket-v1 v0.0.0-20191003203704-cd6c0379d76e/go.mod h1:SemzgOj1qtmOF9vm17FA/PFJGT7urnLVmCv1N2QawH8=
 github.com/src-d/envconfig v1.0.0 h1:/AJi6DtjFhZKNx3OB2qMsq7y4yT5//AeSZIe7rk+PX8=
 github.com/src-d/envconfig v1.0.0/go.mod h1:Q9YQZ7BKITldTBnoxsE5gOeB5y66RyPXeue/R4aaNBc=
 github.com/src-d/metadata-retrieval v0.0.0-20190930135144-01b82fabac42 h1:SIYcS+Sy0+bp7N84UQ6W9yr6CqOzv5Zk9zumP6zBc8A=

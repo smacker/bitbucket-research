@@ -236,14 +236,16 @@ type PRStateUpdate struct {
 }
 
 type Activity struct {
-	ID            int
-	CreatedDate   int64
-	User          bitbucketv1.User
-	Action        string
+	ID          int
+	CreatedDate int64
+	User        bitbucketv1.User
+	Action      string
+	// fields below are only for comments
 	CommentAction string
 	Comment       Comment
-	//commentAnchor - for comments in code
-	//diff - for comments in code
+	// fields below are only for comments in code
+	// commentAnchor
+	// diff
 }
 
 func GetActivitiesResponse(r *bitbucketv1.APIResponse) ([]Activity, error) {
@@ -252,73 +254,68 @@ func GetActivitiesResponse(r *bitbucketv1.APIResponse) ([]Activity, error) {
 	return m, err
 }
 
-// API provides special endpoint for getting only comments but
-// c.DefaultApi.GetComments_7 is broken, it doesn't replace values in URL
-// and API also requires `path` param which is a path of a file
-// which makes it impossible to use to retrive general comments
-//
-// Pagination isn't supported by go wrapper, will return only 25 entities
 func getPRActivity(c *bitbucketv1.APIClient, projectKey, repositorySlug string, pullRequestID int) ([]Comment, []Review, *PRStateUpdate, error) {
 	var comments []Comment
 	var reviews []Review
 	var state *PRStateUpdate
 
-	// start := 0
-	// for {
-	resp, err := c.DefaultApi.GetPullRequestActivity(projectKey, repositorySlug, pullRequestID)
-	//map[string]interface{}{"limit": defaultLimit, "start": start}
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("activities req failed: %v", err)
-	}
-
-	pageActivities, err := GetActivitiesResponse(resp)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("activities decoding failed: %v", err)
-	}
-
-	for _, a := range pageActivities {
-		switch a.Action {
-		case "COMMENTED":
-			if a.CommentAction != "ADDED" {
-				continue
-			}
-			comments = append(comments, a.Comment)
-		case "APPROVED":
-			reviews = append(reviews, Review{
-				ID:          a.ID,
-				State:       "APPROVED",
-				User:        a.User,
-				CreatedDate: a.CreatedDate,
-			})
-		case "REVIEWED":
-			reviews = append(reviews, Review{
-				ID:          a.ID,
-				State:       "CHANGES_REQUESTED",
-				User:        a.User,
-				CreatedDate: a.CreatedDate,
-			})
-		case "MERGED":
-			state = &PRStateUpdate{
-				State: "MERGED",
-				User:  a.User,
-				Date:  a.CreatedDate,
-			}
-		case "DECLINED":
-			state = &PRStateUpdate{
-				State: "CLOSED",
-				User:  a.User,
-				Date:  a.CreatedDate,
-			}
+	start := 0
+	for {
+		resp, err := c.DefaultApi.GetPullRequestActivity(projectKey, repositorySlug, pullRequestID, map[string]interface{}{
+			"limit": defaultLimit, "start": start,
+		})
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("activities req failed: %v", err)
 		}
 
-	}
-	// isLastPage := resp.Values["isLastPage"].(bool)
-	// if isLastPage {
-	// 	break
-	// }
+		pageActivities, err := GetActivitiesResponse(resp)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("activities decoding failed: %v", err)
+		}
 
-	//start = int(resp.Values["nextPageStart"].(float64))
-	//}
+		for _, a := range pageActivities {
+			switch a.Action {
+			case "COMMENTED":
+				if a.CommentAction != "ADDED" {
+					continue
+				}
+				comments = append(comments, a.Comment)
+			case "APPROVED":
+				reviews = append(reviews, Review{
+					ID:          a.ID,
+					State:       "APPROVED",
+					User:        a.User,
+					CreatedDate: a.CreatedDate,
+				})
+			case "REVIEWED":
+				reviews = append(reviews, Review{
+					ID:          a.ID,
+					State:       "CHANGES_REQUESTED",
+					User:        a.User,
+					CreatedDate: a.CreatedDate,
+				})
+			case "MERGED":
+				state = &PRStateUpdate{
+					State: "MERGED",
+					User:  a.User,
+					Date:  a.CreatedDate,
+				}
+			case "DECLINED":
+				state = &PRStateUpdate{
+					State: "CLOSED",
+					User:  a.User,
+					Date:  a.CreatedDate,
+				}
+			}
+
+		}
+		isLastPage := resp.Values["isLastPage"].(bool)
+		if isLastPage {
+			break
+		}
+
+		start = int(resp.Values["nextPageStart"].(float64))
+	}
 
 	return comments, reviews, state, nil
 }

@@ -278,6 +278,27 @@ func GetActivitiesResponse(r *bitbucketv1.APIResponse) ([]Activity, error) {
 	return m, err
 }
 
+func expandComment(c Comment) []Comment {
+	comments := []Comment{c}
+	for _, cc := range c.Comments {
+		comments = append(comments, expandComment(cc)...)
+	}
+
+	return comments
+}
+
+func expandDiffComment(c Comment, a CommentAnchor) []DiffComment {
+	comments := []DiffComment{DiffComment{
+		Comment:       c,
+		CommentAnchor: a,
+	}}
+	for _, cc := range c.Comments {
+		comments = append(comments, expandDiffComment(cc, a)...)
+	}
+
+	return comments
+}
+
 func getPRActivity(c *bitbucketv1.APIClient, projectKey, repositorySlug string, pullRequestID int) ([]Comment, []DiffComment, []Review, *PRStateUpdate, error) {
 	var comments []Comment
 	var diffComments []DiffComment
@@ -305,12 +326,9 @@ func getPRActivity(c *bitbucketv1.APIClient, projectKey, repositorySlug string, 
 					continue
 				}
 				if a.CommentAnchor != nil {
-					diffComments = append(diffComments, DiffComment{
-						Comment:       a.Comment,
-						CommentAnchor: *a.CommentAnchor,
-					})
+					diffComments = append(diffComments, expandDiffComment(a.Comment, *a.CommentAnchor)...)
 				} else {
-					comments = append(comments, a.Comment)
+					comments = append(comments, expandComment(a.Comment)...)
 				}
 
 			case "APPROVED":
